@@ -20,6 +20,7 @@ import rest.addressbook.domain.AddressBook;
 import rest.addressbook.domain.Person;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 /**
  * A simple test suite.
@@ -41,6 +42,8 @@ public class AddressBookServiceTest {
 		// Prepare server
 		AddressBook ab = new AddressBook();
 		launchServer(ab);
+		// Create the object's hash before the first GET
+		int hashInicial = ab.hashCode();
 
 		// Request the address book
 		Client client = ClientBuilder.newClient();
@@ -54,6 +57,14 @@ public class AddressBookServiceTest {
 		// Verify that GET /contacts is well implemented by the service, i.e
 		// complete the test to ensure that it is safe and idempotent
 		//////////////////////////////////////////////////////////////////////
+
+		Response response2 = client.target("http://localhost:8282/contacts").request().get();
+		assertEquals(response.getStatus(), response2.getStatus());
+		assertEquals(0, response2.readEntity(AddressBook.class).getPersonList().size());
+		
+		// Create a new hash of the object to check if it has been modified
+		int hashFinal = ab.hashCode();
+		assertEquals(hashInicial, hashFinal);
 	}
 
 	@Test
@@ -61,6 +72,9 @@ public class AddressBookServiceTest {
 		// Prepare server
 		AddressBook ab = new AddressBook();
 		launchServer(ab);
+
+		// Create the object's hash before the first POST
+		int hashInicial = ab.hashCode();
 
 		// Prepare data
 		Person juan = new Person();
@@ -95,7 +109,21 @@ public class AddressBookServiceTest {
 		// Verify that POST /contacts is well implemented by the service, i.e
 		// complete the test to ensure that it is not safe and not idempotent
 		//////////////////////////////////////////////////////////////////////	
-				
+		
+		// Check again that the new user exists for not idempotence
+		Response response2 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON)
+				.post(Entity.entity(juan, MediaType.APPLICATION_JSON));
+
+		assertNotEquals(response.getStatus(), response2.getStatus());
+		juanUpdated = response2.readEntity(Person.class);
+		assertNotEquals(1, juanUpdated.getId());
+		assertNotEquals(juanURI, juanUpdated.getHref());
+
+		// Create a new hash of the object to check if it has not been modified (not safe)
+		int hashFinal = ab.hashCode();
+		assertNotEquals(hashInicial, hashFinal);
+
 	}
 
 	@Test
@@ -107,6 +135,7 @@ public class AddressBookServiceTest {
 		salvador.setId(ab.nextId());
 		ab.getPersonList().add(salvador);
 		launchServer(ab);
+		
 
 		// Prepare data
 		Person juan = new Person();
@@ -136,6 +165,9 @@ public class AddressBookServiceTest {
 		assertEquals(3, mariaUpdated.getId());
 		assertEquals(mariaURI, mariaUpdated.getHref());
 
+		// Create the hashcode before the GET to check later if it is safe
+		int hashInicial = ab.hashCode();
+
 		// Check that the new user exists
 		response = client.target("http://localhost:8282/contacts/person/3")
 				.request(MediaType.APPLICATION_JSON).get();
@@ -151,6 +183,21 @@ public class AddressBookServiceTest {
 		// complete the test to ensure that it is safe and idempotent
 		//////////////////////////////////////////////////////////////////////	
 	
+
+		//Check idempotence
+		Response response2 = client.target("http://localhost:8282/contacts/person/3")
+				.request(MediaType.APPLICATION_JSON).get();
+		assertEquals(response2.getStatus(), response.getStatus());
+		assertEquals(response.getMediaType(), response2.getMediaType());
+		mariaUpdated = response2.readEntity(Person.class);
+		assertEquals(maria.getName(), mariaUpdated.getName());
+		assertEquals(3, mariaUpdated.getId());
+		assertEquals(mariaURI, mariaUpdated.getHref());
+
+
+		// Check it is safe comparing both hashcodes
+		int hashFinal = ab.hashCode();
+		assertEquals(hashInicial, hashFinal);
 	}
 
 	@Test
@@ -165,6 +212,10 @@ public class AddressBookServiceTest {
 		ab.getPersonList().add(salvador);
 		ab.getPersonList().add(juan);
 		launchServer(ab);
+
+		// Create the hashcode before the GET to check later if it is safe
+		int hashInicial = ab.hashCode();
+
 
 		// Test list of contacts
 		Client client = ClientBuilder.newClient();
@@ -183,6 +234,21 @@ public class AddressBookServiceTest {
 		// complete the test to ensure that it is safe and idempotent
 		//////////////////////////////////////////////////////////////////////	
 	
+		// Check idempotence
+		Response response2 = client.target("http://localhost:8282/contacts")
+				.request(MediaType.APPLICATION_JSON).get();
+		assertEquals(response.getStatus(), response2.getStatus());
+		assertEquals(response.getMediaType(), response2.getMediaType());
+		AddressBook addressBookRetrieved2 = response2
+				.readEntity(AddressBook.class);
+		assertEquals(addressBookRetrieved.getPersonList().size(), addressBookRetrieved2.getPersonList().size());
+		assertEquals(juan.getName(), addressBookRetrieved2.getPersonList()
+				.get(1).getName());
+
+
+		// Check it is safe comparing both hashcodes
+		int hashFinal = ab.hashCode();
+		assertEquals(hashInicial, hashFinal);
 	}
 
 	@Test
@@ -199,6 +265,9 @@ public class AddressBookServiceTest {
 		ab.getPersonList().add(salvador);
 		ab.getPersonList().add(juan);
 		launchServer(ab);
+
+		// Create the hashcode before the PUT to check later if it is safe
+		int hashInicial = ab.hashCode();
 
 		// Update Maria
 		Person maria = new Person();
@@ -236,6 +305,17 @@ public class AddressBookServiceTest {
 		// complete the test to ensure that it is idempotent but not safe
 		//////////////////////////////////////////////////////////////////////	
 	
+		//Retry the PUT to check idempotence
+		Response response2 = client
+				.target("http://localhost:8282/contacts/person/3")
+				.request(MediaType.APPLICATION_JSON)
+				.put(Entity.entity(maria, MediaType.APPLICATION_JSON));
+				// Check if the returned code is equal
+		assertEquals(response.getStatus(), response2.getStatus());
+
+		// Check it is not safe comparing both hashcodes
+		int hashFinal = ab.hashCode();
+		assertNotEquals(hashInicial, hashFinal);
 	}
 
 	@Test
@@ -251,6 +331,9 @@ public class AddressBookServiceTest {
 		ab.getPersonList().add(salvador);
 		ab.getPersonList().add(juan);
 		launchServer(ab);
+
+		// Create the hashcode before the DELETE to check later if it is safe
+		int hashInicial = ab.hashCode();
 
 		// Delete a user
 		Client client = ClientBuilder.newClient();
@@ -269,6 +352,15 @@ public class AddressBookServiceTest {
 		// complete the test to ensure that it is idempotent but not safe
 		//////////////////////////////////////////////////////////////////////	
 
+
+		// Verify that the user has been deleted
+		Response response2 = client.target("http://localhost:8282/contacts/person/2")
+				.request().delete();
+		assertEquals(response.getStatus(), response2.getStatus());
+
+		// Check it is not safe comparing both hashcodes
+		int hashFinal = ab.hashCode();
+		assertNotEquals(hashInicial, hashFinal);
 	}
 
 	@Test
